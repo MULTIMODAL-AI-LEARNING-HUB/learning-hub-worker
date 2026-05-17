@@ -1,0 +1,13 @@
+services:
+  worker:
+    build: .
+    env_file: .env
+    depends_on:
+      - redis
+    networks:
+      - hub-network
+
+networks:
+  hub-network:
+    external: true
+    name: hub-network
