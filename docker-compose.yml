@@ -1,11 +1,21 @@
 services:
   worker:
     build: .
+    init: true
+    restart: unless-stopped
     env_file: .env
-    depends_on:
-      - redis
     networks:
       - hub-network
+    healthcheck:
+      test: ["CMD", "celery", "-A", "celery_app", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
 
 networks:
   hub-network:
