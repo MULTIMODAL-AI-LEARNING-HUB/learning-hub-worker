@@ -4,6 +4,12 @@ services:
     init: true
     restart: unless-stopped
     env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - DATABASE_URL=postgresql+asyncpg://ai_hub_user:my_secure_password@db:5432/ai_learning_hub_db
+      - MINIO_ENDPOINT=minio:9000
+      - QDRANT_HOST=qdrant
     networks:
       - hub-network
     healthcheck:
