@@ -76,6 +76,8 @@ jobs:
           file: ./Dockerfile
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: registry.heroku.com/${{ secrets.HEROKU_APP_NAME_WORKER }}/worker
+          provenance: false
+          sbom: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
