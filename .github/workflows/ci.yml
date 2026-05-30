@@ -89,4 +89,5 @@ jobs:
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
         run: |
+          heroku stack:set container --app ${{ secrets.HEROKU_APP_NAME_WORKER }}
           heroku container:release worker --app ${{ secrets.HEROKU_APP_NAME_WORKER }}
