@@ -81,6 +81,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Install Heroku CLI
+        run: curl https://cli-assets.heroku.com/install.sh | sh
+
       - name: Release Heroku Container
         if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         env:
