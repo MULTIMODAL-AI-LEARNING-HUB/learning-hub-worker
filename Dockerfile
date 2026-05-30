@@ -27,6 +27,7 @@ COPY . .
 
 # Set path to include user-installed packages
 ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONPATH=/root/.local/lib/python3.10/site-packages
 ENV PYTHONUNBUFFERED=1
 
-CMD ["celery", "-A", "celery_app", "worker", "--loglevel=info"]
+CMD celery -A celery_app worker --loglevel=info
