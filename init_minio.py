@@ -12,13 +12,13 @@ def init_minio():
     access_key = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
     secret_key = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
     bucket_name = os.getenv("MINIO_BUCKET_NAME", "documents-bucket")
-    
+
     # Strip protocol prefix (e.g. http://) from endpoint if present
     if endpoint.startswith("http://"):
         endpoint = endpoint[7:]
     elif endpoint.startswith("https://"):
         endpoint = endpoint[8:]
-        
+
     print(f"Connecting to MinIO at {endpoint}...")
     client = Minio(
         endpoint,
@@ -26,7 +26,7 @@ def init_minio():
         secret_key=secret_key,
         secure=False
     )
-    
+
     if not client.bucket_exists(bucket_name):
         print(f"Bucket '{bucket_name}' does not exist. Creating...")
         client.make_bucket(bucket_name)
@@ -36,8 +36,8 @@ def init_minio():
 
     # Apply Lifecycle Policies
     print(f"Configuring lifecycle policies for bucket '{bucket_name}'...")
-    
-    # Define rules: 
+
+    # Define rules:
     # 1. Clean temporary files in temp/ folder after 1 day (86400 seconds)
     # 2. Clean deleted files in deleted/ folder after 30 days
     xml_data = (
@@ -60,11 +60,11 @@ def init_minio():
         '</Rule>'
         '</LifecycleConfiguration>'
     )
-    
+
     xml_bytes = xml_data.encode('utf-8')
     content_md5 = base64.b64encode(hashlib.md5(xml_bytes).digest()).decode('utf-8')
     headers = {'Content-MD5': content_md5, 'Content-Type': 'application/xml'}
-    
+
     # Execute raw S3 API request to upload the XML payload
     client._execute(
         'PUT',
