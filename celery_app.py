@@ -14,7 +14,7 @@ celery_app = Celery(
     broker=BROKER_URL,
     backend=REDIS_URL,
     include=[
-        "src.tasks.document",
+        "src.tasks.document_processing",
         "src.tasks.quiz",
         "src.tasks.essay",
         "src.tasks.flashcards",
@@ -29,10 +29,12 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_track_started=True,
-    task_time_limit=3600,  # 1 hour max
-    task_soft_time_limit=3000,  # 50 minutes soft limit
+    task_time_limit=360,          # 6 minutes max limit
+    task_soft_time_limit=300,     # 5 minutes soft limit
     worker_prefetch_multiplier=1,
     worker_max_tasks_per_child=100,
+    task_acks_late=True,
+    worker_concurrency=int(os.getenv("CELERY_CONCURRENCY", "4")),
 )
 
 if __name__ == "__main__":

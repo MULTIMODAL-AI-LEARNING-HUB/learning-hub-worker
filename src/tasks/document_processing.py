@@ -2,7 +2,6 @@
 
 import json
 import uuid
-
 from celery_app import celery_app
 from src.core.config import settings
 
@@ -11,12 +10,14 @@ from src.core.config import settings
 def process_document_task(self, document_id: str) -> dict:
     """Process an uploaded document: extract text, chunk, embed, store in Qdrant."""
     try:
+        self.update_state(state='PROGRESS', meta={'progress': 5, 'message': 'Starting document processing'})
         _update_status(document_id, "processing")
 
         doc = _fetch_document(document_id)
         if not doc:
             return {"status": "error", "message": "Document not found"}
 
+        self.update_state(state='PROGRESS', meta={'progress': 10, 'message': 'Downloading file from storage'})
         pdf_bytes = _download_from_minio(document_id)
         if not pdf_bytes:
             _update_status(document_id, "failed")
@@ -24,17 +25,25 @@ def process_document_task(self, document_id: str) -> dict:
 
         from src.tasks.pdf_processing import extract_text_from_pdf, process_pdf_pages
 
+        self.update_state(state='PROGRESS', meta={'progress': 20, 'message': 'Extracting text content from PDF'})
         pages = extract_text_from_pdf(pdf_bytes)
         if not pages:
             _update_status(document_id, "failed")
             return {"status": "error", "message": "No text extracted from PDF"}
 
+        self.update_state(state='PROGRESS', meta={'progress': 40, 'message': 'Chunking text content'})
         chunks = process_pdf_pages(pages)
+        if not chunks:
+            _update_status(document_id, "failed")
+            return {"status": "error", "message": "No semantic chunks could be created"}
 
         from src.utils.embeddings import generate_embedding
 
+        self.update_state(state='PROGRESS', meta={'progress': 50, 'message': 'Generating vector embeddings'})
         qdrant_chunks = []
-        for chunk in chunks:
+        total_chunks = len(chunks)
+        for idx, chunk in enumerate(chunks):
+            # Generate real sentence-transformers embeddings
             vector = generate_embedding(chunk["text"])
             qdrant_chunks.append(
                 {
@@ -46,9 +55,14 @@ def process_document_task(self, document_id: str) -> dict:
                     "page_number": chunk.get("page_number"),
                 }
             )
+            # Update progress dynamically between 50% and 85%
+            pct = 50 + int((idx + 1) / total_chunks * 35)
+            if idx % 10 == 0 or idx == total_chunks - 1:
+                self.update_state(state='PROGRESS', meta={'progress': pct, 'message': f'Embedding chunk {idx+1}/{total_chunks}'})
 
         from src.utils.qdrant_client import upsert_chunks
 
+        self.update_state(state='PROGRESS', meta={'progress': 90, 'message': 'Upserting vectors to search index'})
         upsert_chunks(qdrant_chunks)
 
         metadata = {
@@ -56,12 +70,13 @@ def process_document_task(self, document_id: str) -> dict:
             "chunk_count": len(chunks),
         }
         _update_document_after_processing(document_id, "ready", metadata)
-
+        
+        self.update_state(state='SUCCESS', meta={'progress': 100, 'message': 'Document processing completed'})
         return {"status": "completed", "document_id": document_id, "chunks": len(chunks)}
 
     except Exception as exc:
         _update_status(document_id, "failed")
-        self.retry(exc=exc, countdown=60)
+        raise self.retry(exc=exc, countdown=10)
 
 
 def _fetch_document(document_id: str) -> dict | None:

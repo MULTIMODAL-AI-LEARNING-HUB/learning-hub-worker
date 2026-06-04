@@ -1,17 +1,21 @@
-"""Embedding utility using Groq API."""
+"""Real embedding generation using sentence-transformers."""
 
-import hashlib
-import math
+from typing import Optional
+from sentence_transformers import SentenceTransformer
+
+_model: Optional[SentenceTransformer] = None
+
+
+def get_embedding_model() -> SentenceTransformer:
+    """Get or load the SentenceTransformer model singleton."""
+    global _model
+    if _model is None:
+        _model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _model
 
 
 def generate_embedding(text: str, dimension: int = 384) -> list[float]:
-    """Generate a deterministic pseudo-embedding from text.
-    In production, use Groq/OpenAI embedding API. This is a local fallback."""
-    h = hashlib.sha512(text.encode("utf-8")).digest()
-    vec = []
-    for i in range(0, min(len(h), dimension * 4), 4):
-        chunk = h[i : i + 4]
-        val = int.from_bytes(chunk, "big") / (2**32)
-        vec.append(val * 2 - 1)
-    norm = math.sqrt(sum(v * v for v in vec)) or 1.0
-    return [v / norm for v in vec]
+    """Generate a real 384-dimensional vector embedding for the given text."""
+    model = get_embedding_model()
+    embedding = model.encode(text)
+    return [float(v) for v in embedding]
