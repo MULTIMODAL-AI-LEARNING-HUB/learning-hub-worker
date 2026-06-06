@@ -1,20 +1,29 @@
-# Worker Requirements
+# ── Core Celery stack ─────────────────────────────────────────────────────────
 celery==5.3.4
 redis==5.0.1
+
+# ── Database ──────────────────────────────────────────────────────────────────
 sqlalchemy==2.0.25
 asyncpg==0.29.0
 psycopg2-binary==2.9.9
+
+# ── HTTP ──────────────────────────────────────────────────────────────────────
 httpx==0.26.0
+
+# ── Config & validation ───────────────────────────────────────────────────────
 pydantic==2.5.3
 pydantic-settings==2.1.0
+python-dotenv==1.0.0
+
+# ── Document parsing ──────────────────────────────────────────────────────────
 pypdf2==3.0.1
 python-docx==1.1.0
 python-multipart==0.0.6
+
+# ── Vector store & embeddings ─────────────────────────────────────────────────
 qdrant-client==1.7.0
-minio==7.2.0
-python-dotenv==1.0.0
+# NOTE: torch is installed as CPU-only via --extra-index-url in Dockerfile/CI
 sentence-transformers==2.5.1
 
-# Testing
-pytest==7.4.4
-pytest-celery==0.0.0
+# ── Object storage ────────────────────────────────────────────────────────────
+minio==7.2.0

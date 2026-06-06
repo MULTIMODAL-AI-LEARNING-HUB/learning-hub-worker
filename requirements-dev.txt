@@ -1,0 +1,5 @@
+# Dev/test dependencies — intentionally lightweight to keep CI fast.
+# Heavy ML packages (sentence-transformers, torch) are NOT installed here;
+# tasks that use them are mocked in tests.
+pytest==7.4.4
+pytest-mock==3.14.0
