@@ -18,7 +18,7 @@ def process_document_task(self, document_id: str) -> dict:
             return {"status": "error", "message": "Document not found"}
 
         self.update_state(state='PROGRESS', meta={'progress': 10, 'message': 'Downloading file from storage'})
-        pdf_bytes = _download_from_minio(document_id)
+        pdf_bytes = _download_from_minio(doc["storage_key"])
         if not pdf_bytes:
             _update_status(document_id, "failed")
             return {"status": "error", "message": "File not found in storage"}
@@ -50,6 +50,7 @@ def process_document_task(self, document_id: str) -> dict:
                     "id": str(uuid.uuid4()),
                     "vector": vector,
                     "document_id": document_id,
+                    "user_id": doc.get("user_id"),
                     "chunk_index": chunk["chunk_index"],
                     "text": chunk["text"],
                     "page_number": chunk.get("page_number"),
@@ -86,11 +87,11 @@ def _fetch_document(document_id: str) -> dict | None:
 
         conn = psycopg2.connect(settings.DATABASE_URL.replace("+asyncpg", ""))
         cur = conn.cursor()
-        cur.execute("SELECT id, file_name, file_url, storage_key FROM documents WHERE id = %s", (document_id,))
+        cur.execute("SELECT id, file_name, file_url, storage_key, user_id FROM documents WHERE id = %s", (document_id,))
         row = cur.fetchone()
         conn.close()
         if row:
-            return {"id": str(row[0]), "file_name": row[1], "file_url": row[2], "storage_key": row[3]}
+            return {"id": str(row[0]), "file_name": row[1], "file_url": row[2], "storage_key": row[3], "user_id": str(row[4])}
         return None
     except Exception:
         return None

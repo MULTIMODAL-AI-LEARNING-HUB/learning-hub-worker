@@ -41,6 +41,7 @@ def upsert_chunks(chunks: list[dict]) -> None:
             vector=chunk["vector"],
             payload={
                 "document_id": chunk["document_id"],
+                "user_id": chunk.get("user_id"),
                 "chunk_index": chunk["chunk_index"],
                 "text": chunk["text"],
                 "page_number": chunk.get("page_number"),
