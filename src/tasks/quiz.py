@@ -20,6 +20,7 @@ def generate_quiz_task(self, document_id: str, quiz_type: str = "quick", questio
 
         response = httpx.post(
             f"{settings.AI_SERVICE_URL}/study/quiz/generate",
+            headers={"X-Internal-API-Key": settings.INTERNAL_API_KEY},
             json={
                 "context": context,
                 "quiz_type": quiz_type,

@@ -1,7 +1,7 @@
 """Worker settings."""
 
 from typing import Any
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     QDRANT_PORT: int = 6333
 
     AI_SERVICE_URL: str = "http://localhost:8001"
+    INTERNAL_API_KEY: str = ""
+    DEBUG: bool = False
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
@@ -30,6 +32,13 @@ class Settings(BaseSettings):
             if v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
                 v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
+
+    @model_validator(mode="after")
+    def validate_secrets(self) -> "Settings":
+        if not self.DEBUG:
+            if not self.INTERNAL_API_KEY or self.INTERNAL_API_KEY in {"", "your_internal_api_key"}:
+                raise ValueError("INTERNAL_API_KEY must be a secure, non-default string in production")
+        return self
 
     class Config:
         env_file = ".env"

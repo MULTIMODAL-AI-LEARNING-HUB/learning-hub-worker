@@ -21,6 +21,7 @@ def grade_essay_task(self, document_id: str, submission_id: str, essay_text: str
 
         response = httpx.post(
             f"{settings.AI_SERVICE_URL}/study/essay/grade",
+            headers={"X-Internal-API-Key": settings.INTERNAL_API_KEY},
             json={
                 "context": context,
                 "essay_text": essay_text,
@@ -35,7 +36,7 @@ def grade_essay_task(self, document_id: str, submission_id: str, essay_text: str
         return {"status": "completed", "grade": data}
 
     except Exception as exc:
-        self.retry(exc=exc, countdown=30)
+        raise self.retry(exc=exc, countdown=30)
 
 
 def _update_submission(submission_id: str, score: float, feedback: str, raw_json: str) -> None:

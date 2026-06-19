@@ -21,6 +21,7 @@ def generate_flashcards_task(self, flashcard_id: str, document_id: str, set_name
 
         response = httpx.post(
             f"{settings.AI_SERVICE_URL}/study/flashcards/generate",
+            headers={"X-Internal-API-Key": settings.INTERNAL_API_KEY},
             json={
                 "context": context,
                 "set_name": set_name,
