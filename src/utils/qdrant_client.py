@@ -19,7 +19,16 @@ VECTOR_SIZE = 384
 def get_qdrant_client() -> QC:
     global _client
     if _client is None:
-        _client = QC(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
+        if settings.QDRANT_URL:
+            _client = QC(
+                url=settings.QDRANT_URL,
+                api_key=settings.QDRANT_API_KEY,
+            )
+        else:
+            _client = QC(
+                host=settings.QDRANT_HOST,
+                port=settings.QDRANT_PORT,
+            )
         _ensure_collection(_client)
     return _client
 

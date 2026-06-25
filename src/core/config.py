@@ -18,6 +18,8 @@ class Settings(BaseSettings):
 
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
+    QDRANT_URL: str | None = None
+    QDRANT_API_KEY: str | None = None
 
     AI_SERVICE_URL: str = "http://localhost:8001"
     INTERNAL_API_KEY: str = ""
