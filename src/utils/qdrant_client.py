@@ -6,6 +6,7 @@ from qdrant_client.models import (
     FieldCondition,
     Filter,
     MatchValue,
+    MatchAny,
     PointStruct,
     VectorParams,
 )
@@ -55,6 +56,8 @@ def upsert_chunks(chunks: list[dict]) -> None:
                 "text": chunk["text"],
                 "page_number": chunk.get("page_number"),
                 "metadata": chunk.get("metadata"),
+                "course_id": chunk.get("course_id"),
+                "material_id": chunk.get("material_id"),
             },
         )
         for chunk in chunks
@@ -62,13 +65,24 @@ def upsert_chunks(chunks: list[dict]) -> None:
     client.upsert(collection_name=COLLECTION_NAME, points=points)
 
 
-def search_similar(query_vector: list[float], document_id: str | None = None, limit: int = 10) -> list[dict]:
+def search_similar(
+    query_vector: list[float],
+    document_id: str | None = None,
+    course_id: str | None = None,
+    user_id: str | None = None,
+    limit: int = 10
+) -> list[dict]:
     client = get_qdrant_client()
-    query_filter = None
+    conditions = []
     if document_id:
-        query_filter = Filter(
-            must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
-        )
+        conditions.append(FieldCondition(key="document_id", match=MatchValue(value=document_id)))
+    if course_id:
+        conditions.append(FieldCondition(key="course_id", match=MatchValue(value=course_id)))
+    if user_id:
+        conditions.append(FieldCondition(key="user_id", match=MatchValue(value=user_id)))
+
+    query_filter = Filter(must=conditions) if conditions else None
+
     results = client.query_points(
         collection_name=COLLECTION_NAME,
         query=query_vector,
