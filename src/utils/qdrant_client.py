@@ -6,7 +6,6 @@ from qdrant_client.models import (
     FieldCondition,
     Filter,
     MatchValue,
-    MatchAny,
     PointStruct,
     VectorParams,
 )
