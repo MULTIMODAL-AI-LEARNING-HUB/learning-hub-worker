@@ -92,4 +92,28 @@ jobs:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
         run: |
           heroku stack:set container --app ${{ secrets.HEROKU_APP_NAME_WORKER }}
-          heroku container:release worker --app ${{ secrets.HEROKU_APP_NAME_WORKER }}
+          heroku container:release worker --app ${{ secrets.HEROKU_APP_NAME_WORKER }} || {
+            echo "========================================="
+            echo "Release failed! Fetching Heroku release logs..."
+            echo "========================================="
+            heroku releases --app ${{ secrets.HEROKU_APP_NAME_WORKER }} -n 5
+            heroku logs --app ${{ secrets.HEROKU_APP_NAME_WORKER }} -n 100
+            exit 1
+          }
+
+      - name: Health Check
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+        run: |
+          echo "Waiting for worker to start..."
+          sleep 10
+          echo "Checking worker status..."
+          heroku ps --app ${{ secrets.HEROKU_APP_NAME_WORKER }}
+          WORKER_STATUS=$(heroku ps --app ${{ secrets.HEROKU_APP_NAME_WORKER }} | grep -c "worker" || true)
+          if [ "$WORKER_STATUS" -gt 0 ]; then
+            echo "Worker is running!"
+          else
+            echo "Warning: No worker dyno found. Logs:"
+            heroku logs --app ${{ secrets.HEROKU_APP_NAME_WORKER }} -n 50
+          fi

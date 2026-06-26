@@ -1,10 +1,61 @@
+# Git
 .git
 .gitignore
+
+# CI/CD
 .github
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.pytest_cache/
+.github/workflows
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache
+.coverage
+htmlcov/
+.mypy_cache
+.ruff_cache
+
+# Virtual environments
 venv/
+.venv/
+env/
 .env
+
+# Testing
+tests/
+pytest.ini
+*.test.py
+pytest.ini
+
+# Documentation
+docs/
+*.md
+!requirements.txt
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.log
+tmp/
+temp/
+.env.example
+*.example
+heroku.yml
+Procfile
