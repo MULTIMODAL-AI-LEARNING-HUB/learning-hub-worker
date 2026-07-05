@@ -1,7 +1,17 @@
 """PDF text extraction and chunking."""
 
 import io
+import re
 from PyPDF2 import PdfReader
+
+
+def strip_html(text: str) -> str:
+    """Remove HTML tags from text, keeping readable content."""
+    if not text:
+        return ""
+    text = re.sub(r'<[^>]+>', ' ', text)
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
 
 def extract_text_from_pdf(pdf_bytes: bytes) -> list[dict]:

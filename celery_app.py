@@ -15,9 +15,12 @@ celery_app = Celery(
     backend=REDIS_URL,
     include=[
         "src.tasks.document_processing",
+        "src.tasks.lesson_content",
+        "src.tasks.course_file",
         "src.tasks.quiz",
         "src.tasks.essay",
         "src.tasks.flashcards",
+        "src.tasks.course_quiz",
     ]
 )
 
