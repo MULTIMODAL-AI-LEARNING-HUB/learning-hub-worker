@@ -8,10 +8,13 @@ from minio import Minio
 load_dotenv()
 
 def init_minio():
-    endpoint = os.getenv("MINIO_ENDPOINT", "localhost:9000")
-    access_key = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-    secret_key = os.getenv("MINIO_SECRET_KEY", "minioadmin123")
+    endpoint = os.getenv("MINIO_ENDPOINT")
+    access_key = os.getenv("MINIO_ACCESS_KEY")
+    secret_key = os.getenv("MINIO_SECRET_KEY")
     bucket_name = os.getenv("MINIO_BUCKET_NAME", "documents-bucket")
+
+    if not endpoint or not access_key or not secret_key:
+        raise ValueError("MINIO_ENDPOINT, MINIO_ACCESS_KEY, and MINIO_SECRET_KEY must be set")
 
     # Strip protocol prefix (e.g. http://) from endpoint if present
     if endpoint.startswith("http://"):
