@@ -16,13 +16,19 @@ def strip_html(text: str) -> str:
 
 def extract_text_from_pdf(pdf_bytes: bytes) -> list[dict]:
     """Extract text from PDF, returning list of {page_number, text}."""
-    reader = PdfReader(io.BytesIO(pdf_bytes))
-    pages = []
-    for i, page in enumerate(reader.pages):
-        text = page.extract_text()
-        if text and text.strip():
-            pages.append({"page_number": i + 1, "text": text.strip()})
-    return pages
+    if not pdf_bytes:
+        return []
+    try:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        pages = []
+        for i, page in enumerate(reader.pages):
+            text = page.extract_text()
+            if text and text.strip():
+                pages.append({"page_number": i + 1, "text": text.strip()})
+        return pages
+    except Exception:
+        return []
+
 
 
 def chunk_text(text: str, chunk_size: int = 512, overlap: int = 100) -> list[str]:
