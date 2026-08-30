@@ -1,5 +1,3 @@
-import pytest
-from unittest.mock import patch, MagicMock
 from src.tasks.pdf_processing import process_pdf_pages, extract_text_from_pdf
 
 def test_process_pdf_pages_chunking():
