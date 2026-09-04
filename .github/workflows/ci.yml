@@ -71,17 +71,18 @@ jobs:
           username: _
           password: ${{ secrets.HEROKU_API_KEY }}
 
-      - name: Build and push Docker image
+      - name: Build Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          load: true
           tags: registry.heroku.com/${{ secrets.HEROKU_APP_NAME_WORKER }}/worker
-          provenance: false
-          sbom: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+
+      - name: Push Docker image to Heroku
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: |
+          docker push registry.heroku.com/${{ secrets.HEROKU_APP_NAME_WORKER }}/worker
 
       - name: Install Heroku CLI
         run: curl https://cli-assets.heroku.com/install.sh | sh
