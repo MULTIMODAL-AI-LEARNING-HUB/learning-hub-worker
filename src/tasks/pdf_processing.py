@@ -2,7 +2,7 @@
 
 import io
 import re
-from PyPDF2 import PdfReader
+from pypdf import PdfReader
 
 
 def strip_html(text: str) -> str:
