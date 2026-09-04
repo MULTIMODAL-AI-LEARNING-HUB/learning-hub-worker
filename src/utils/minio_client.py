@@ -9,8 +9,15 @@ _client: Minio | None = None
 def get_minio_client() -> Minio:
     global _client
     if _client is None:
+        endpoint = settings.MINIO_ENDPOINT
+        if endpoint.startswith("https://"):
+            endpoint = endpoint[len("https://"):]
+        elif endpoint.startswith("http://"):
+            endpoint = endpoint[len("http://"):]
+        endpoint = endpoint.rstrip("/")
+
         _client = Minio(
-            settings.MINIO_ENDPOINT,
+            endpoint,
             access_key=settings.MINIO_ACCESS_KEY,
             secret_key=settings.MINIO_SECRET_KEY,
             secure=settings.MINIO_SECURE,
