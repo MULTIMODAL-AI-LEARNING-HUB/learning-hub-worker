@@ -22,7 +22,8 @@ python-multipart==0.0.6
 
 # ── Vector store & embeddings ─────────────────────────────────────────────────
 qdrant-client==1.7.0
-# NOTE: torch is installed as CPU-only via --extra-index-url in Dockerfile/CI
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
 sentence-transformers==2.5.1
 
 # ── Object storage ────────────────────────────────────────────────────────────
