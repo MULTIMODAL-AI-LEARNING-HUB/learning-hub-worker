@@ -1,8 +1,9 @@
 """
 Celery Application for Learning Hub Worker
 """
-from celery import Celery
 import os
+import ssl
+from celery import Celery
 
 # Redis connection
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -39,6 +40,12 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_concurrency=int(os.getenv("CELERY_CONCURRENCY", "4")),
 )
+
+if BROKER_URL.startswith("rediss://"):
+    celery_app.conf.update(broker_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE})
+
+if REDIS_URL.startswith("rediss://"):
+    celery_app.conf.update(redis_backend_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE})
 
 if __name__ == "__main__":
     celery_app.start()
