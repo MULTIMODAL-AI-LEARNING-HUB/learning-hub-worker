@@ -44,8 +44,9 @@ class Settings(BaseSettings):
         if is_test:
             return self
 
+        weak_values = {"", "secret", "changeme", "your_internal_api_key", "your_internal_key"}
         if not self.DEBUG:
-            if not self.INTERNAL_API_KEY or self.INTERNAL_API_KEY in {"", "your_internal_api_key"}:
+            if not self.INTERNAL_API_KEY or self.INTERNAL_API_KEY.lower() in weak_values or len(self.INTERNAL_API_KEY) < 16:
                 raise ValueError(
                     "INTERNAL_API_KEY must be a secure, non-default string in production. "
                     "Generate one with: python -c \"import secrets; print(secrets.token_hex(16))\""
@@ -57,6 +58,8 @@ class Settings(BaseSettings):
                     "MINIO_SECRET_KEY must not be the default value in production. "
                     "Set a strong secret key in your .env file."
                 )
+            if not self.MINIO_SECURE:
+                raise ValueError("MINIO_SECURE must be true in production")
         return self
 
 

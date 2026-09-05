@@ -71,8 +71,8 @@ DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/db
 
 # Storage
 MINIO_ENDPOINT=localhost:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin123
+MINIO_ACCESS_KEY=CHANGEME_minio_access_key
+MINIO_SECRET_KEY=CHANGEME_minio_secret_key
 MINIO_BUCKET=documents-bucket
 
 # Vector DB
@@ -81,7 +81,7 @@ QDRANT_PORT=6333
 
 # AI Service
 AI_SERVICE_URL=http://localhost:8001
-AI_SERVICE_API_KEY=your_key
+INTERNAL_API_KEY=CHANGEME_generate_a_shared_service_key
 ```
 
 ## Tasks

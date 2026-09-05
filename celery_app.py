@@ -42,10 +42,10 @@ celery_app.conf.update(
 )
 
 if BROKER_URL.startswith("rediss://"):
-    celery_app.conf.update(broker_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE})
+    celery_app.conf.update(broker_use_ssl={"ssl_cert_reqs": ssl.CERT_REQUIRED})
 
 if REDIS_URL.startswith("rediss://"):
-    celery_app.conf.update(redis_backend_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE})
+    celery_app.conf.update(redis_backend_use_ssl={"ssl_cert_reqs": ssl.CERT_REQUIRED})
 
 if __name__ == "__main__":
     celery_app.start()

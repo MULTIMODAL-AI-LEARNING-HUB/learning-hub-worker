@@ -34,4 +34,8 @@ ENV PATH=/root/.local/bin:$PATH
 ENV PYTHONPATH=/root/.local/lib/python3.10/site-packages
 ENV PYTHONUNBUFFERED=1
 
+RUN useradd --create-home --shell /usr/sbin/nologin appuser \
+    && chown -R appuser:appuser /app
+USER appuser
+
 CMD celery -A celery_app worker --loglevel=info
