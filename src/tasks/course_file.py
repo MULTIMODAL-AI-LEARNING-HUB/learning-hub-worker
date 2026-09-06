@@ -25,6 +25,18 @@ def process_course_file_task(
         source_type: "course_material" | "lesson_attachment"
         file_name: Original filename for extension detection
     """
+    try:
+        uuid.UUID(course_id)
+        if lesson_id:
+            uuid.UUID(lesson_id)
+        if material_id:
+            uuid.UUID(material_id)
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise ValueError("Invalid course, lesson, or material UUID") from exc
+
+    if source_type not in {"course_material", "lesson_attachment"}:
+        raise ValueError("Invalid course file source type")
+
     import psycopg2
     conn = None
     try:

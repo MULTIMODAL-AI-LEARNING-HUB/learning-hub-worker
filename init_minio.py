@@ -21,13 +21,14 @@ def init_minio():
         endpoint = endpoint[7:]
     elif endpoint.startswith("https://"):
         endpoint = endpoint[8:]
+    secure = os.getenv("MINIO_SECURE", "false").lower() in {"1", "true", "yes", "on"}
 
     print(f"Connecting to MinIO at {endpoint}...")
     client = Minio(
         endpoint,
         access_key=access_key,
         secret_key=secret_key,
-        secure=False
+        secure=secure
     )
 
     if not client.bucket_exists(bucket_name):
@@ -36,6 +37,13 @@ def init_minio():
         print(f"Bucket '{bucket_name}' created successfully!")
     else:
         print(f"Bucket '{bucket_name}' already exists.")
+
+    # Keep objects private; application access uses authenticated API calls
+    # and short-lived presigned URLs.
+    client.set_bucket_policy(
+        bucket_name,
+        '{"Version":"2012-10-17","Statement":[]}',
+    )
 
     # Apply Lifecycle Policies
     print(f"Configuring lifecycle policies for bucket '{bucket_name}'...")

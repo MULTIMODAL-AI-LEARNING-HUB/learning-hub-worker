@@ -4,10 +4,23 @@ Celery Application for Learning Hub Worker
 import os
 import ssl
 from celery import Celery
+from dotenv import load_dotenv
 
-# Redis connection
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/1")
+load_dotenv()
+
+
+def _required_url(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise RuntimeError(f"{name} must be configured; refusing to use an unauthenticated Redis default")
+    debug = os.getenv("DEBUG", "false").lower() in {"1", "true", "yes", "on"}
+    if not debug and (value.startswith("redis://localhost") or value.startswith("redis://127.0.0.1")):
+        raise RuntimeError(f"{name} points to unauthenticated local Redis; configure a protected Redis URL")
+    return value
+
+
+REDIS_URL = _required_url("REDIS_URL")
+BROKER_URL = _required_url("CELERY_BROKER_URL")
 
 # Create Celery app
 celery_app = Celery(
@@ -42,10 +55,10 @@ celery_app.conf.update(
 )
 
 if BROKER_URL.startswith("rediss://"):
-    celery_app.conf.update(broker_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE})
+    celery_app.conf.update(broker_use_ssl={"ssl_cert_reqs": ssl.CERT_REQUIRED})
 
 if REDIS_URL.startswith("rediss://"):
-    celery_app.conf.update(redis_backend_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE})
+    celery_app.conf.update(redis_backend_use_ssl={"ssl_cert_reqs": ssl.CERT_REQUIRED})
 
 if __name__ == "__main__":
     celery_app.start()

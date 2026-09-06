@@ -9,6 +9,11 @@ from src.core.config import settings
 @celery_app.task(name="process_document_task", bind=True, max_retries=3)
 def process_document_task(self, document_id: str) -> dict:
     """Process an uploaded document: extract text, chunk, embed, store in Qdrant."""
+    try:
+        uuid.UUID(document_id)
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise ValueError("Invalid document UUID") from exc
+
     import psycopg2
     conn = None
     try:
