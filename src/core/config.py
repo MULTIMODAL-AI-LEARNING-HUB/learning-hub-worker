@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     AI_SERVICE_URL: str = "http://localhost:8001"
     INTERNAL_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
     DEBUG: bool = False
 
     @field_validator("DATABASE_URL", mode="before")

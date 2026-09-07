@@ -24,6 +24,7 @@ WORKDIR /app
 # Runtime dependency for psycopg2-binary
 RUN apt-get update && apt-get install -y \
     libpq5 \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed Python packages from builder

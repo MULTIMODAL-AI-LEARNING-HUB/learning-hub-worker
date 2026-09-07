@@ -1,9 +1,12 @@
 """Document processing task."""
 
 import json
+import logging
 import uuid
 from celery_app import celery_app
 from src.core.config import settings
+
+logger = logging.getLogger("worker.document_processing")
 
 
 @celery_app.task(name="process_document_task", bind=True, max_retries=3)
@@ -45,9 +48,8 @@ def process_document_task(self, document_id: str) -> dict:
                 return {"status": "error", "message": "No text extracted from PDF"}
         elif ext in {"mp3", "mp4", "webm"}:
             self.update_state(state='PROGRESS', meta={'progress': 20, 'message': 'Transcribing audio/video file'})
-            # Mock transcription for video/audio to enable search and chat on uploaded media files
-            mock_text = f"This is a mock transcription of the uploaded media file {doc['file_name']}. Content covers main features and architecture of the Multimodal AI Learning Hub platform."
-            pages = [{"page_number": 1, "text": mock_text}]
+            from src.tasks.transcription import transcribe_media
+            pages = transcribe_media(file_bytes, ext, file_name=doc.get("file_name", ""))
         else:
             _update_status(conn, document_id, "failed")
             return {"status": "error", "message": f"Unsupported file type: {ext}"}

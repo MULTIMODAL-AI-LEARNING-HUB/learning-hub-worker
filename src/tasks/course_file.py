@@ -62,9 +62,9 @@ def process_course_file_task(
             if not pages:
                 return {"status": "error", "message": "No text extracted from PDF"}
         elif ext in {"mp3", "mp4", "webm"}:
-            self.update_state(state='PROGRESS', meta={'progress': 20, 'message': 'Processing media file'})
-            mock_text = f"Content from media file {file_name}."
-            pages = [{"page_number": 1, "text": mock_text}]
+            self.update_state(state='PROGRESS', meta={'progress': 20, 'message': 'Transcribing audio/video file'})
+            from src.tasks.transcription import transcribe_media
+            pages = transcribe_media(file_bytes, ext, file_name=file_name or "")
         else:
             return {"status": "error", "message": f"Unsupported file type: {ext}"}
 
