@@ -8,6 +8,11 @@ from src.core.config import settings
 
 logger = logging.getLogger("worker.document_processing")
 
+# NOTE: bang documents dung cot DB ten "metadata" (model API anh xa
+# file_metadata -> "metadata"). Raw SQL bat buoc dung dung ten cot DB,
+# neu dung "file_metadata" se loi column khong ton tai va document ket
+# processing mai mai.
+
 
 @celery_app.task(name="process_document_task", bind=True, max_retries=3)
 def process_document_task(self, document_id: str) -> dict:
@@ -21,7 +26,7 @@ def process_document_task(self, document_id: str) -> dict:
     conn = None
     try:
         conn = psycopg2.connect(settings.DATABASE_URL.replace("+asyncpg", ""))
-        
+
         self.update_state(state='PROGRESS', meta={'progress': 5, 'message': 'Starting document processing'})
         _update_status(conn, document_id, "processing")
 
@@ -30,10 +35,10 @@ def process_document_task(self, document_id: str) -> dict:
             return {"status": "error", "message": "Document not found"}
 
         self.update_state(state='PROGRESS', meta={'progress': 10, 'message': 'Downloading file from storage'})
-        file_bytes = _download_from_minio(doc["storage_key"])
+        file_bytes, dl_error = _download_from_minio(doc["storage_key"])
         if not file_bytes:
-            _update_status(conn, document_id, "failed")
-            return {"status": "error", "message": "File not found in storage"}
+            _update_status(conn, document_id, "failed", error=dl_error or "File not found in storage")
+            return {"status": "error", "message": dl_error or "File not found in storage"}
 
         # Route processing depending on file extension
         ext = doc["file_name"].split(".")[-1].lower() if "." in doc["file_name"] else ""
@@ -44,7 +49,7 @@ def process_document_task(self, document_id: str) -> dict:
             self.update_state(state='PROGRESS', meta={'progress': 20, 'message': 'Extracting text content from PDF'})
             pages = extract_text_from_pdf(file_bytes)
             if not pages:
-                _update_status(conn, document_id, "failed")
+                _update_status(conn, document_id, "failed", error="No text extracted from PDF")
                 return {"status": "error", "message": "No text extracted from PDF"}
         elif ext in {"mp3", "mp4", "webm", "wav"}:
             self.update_state(state='PROGRESS', meta={'progress': 20, 'message': 'Transcribing audio/video file'})
@@ -55,11 +60,11 @@ def process_document_task(self, document_id: str) -> dict:
             from src.tasks.office_text import extract_text_from_office_file
             text = extract_text_from_office_file(file_bytes, ext)
             if not text:
-                _update_status(conn, document_id, "failed")
+                _update_status(conn, document_id, "failed", error=f"No text extracted from {ext.upper()} file")
                 return {"status": "error", "message": f"No text extracted from {ext.upper()} file"}
             pages = [{"page_number": 1, "text": text}]
         else:
-            _update_status(conn, document_id, "failed")
+            _update_status(conn, document_id, "failed", error=f"Unsupported file type: {ext}")
             return {"status": "error", "message": f"Unsupported file type: {ext}"}
 
         from src.tasks.pdf_processing import process_pdf_pages
@@ -67,7 +72,7 @@ def process_document_task(self, document_id: str) -> dict:
         self.update_state(state='PROGRESS', meta={'progress': 40, 'message': 'Chunking text content'})
         chunks = process_pdf_pages(pages)
         if not chunks:
-            _update_status(conn, document_id, "failed")
+            _update_status(conn, document_id, "failed", error="No semantic chunks could be created")
             return {"status": "error", "message": "No semantic chunks could be created"}
 
         from src.utils.embeddings import generate_embedding
@@ -97,20 +102,25 @@ def process_document_task(self, document_id: str) -> dict:
         from src.utils.qdrant_client import upsert_chunks
 
         self.update_state(state='PROGRESS', meta={'progress': 90, 'message': 'Upserting vectors to search index'})
-        upsert_chunks(qdrant_chunks)
+        try:
+            upsert_chunks(qdrant_chunks)
+        except Exception as exc:
+            logger.warning("Qdrant upsert failed for %s: %s", document_id, exc)
+            _update_status(conn, document_id, "failed", error=f"Vector index upsert failed: {exc}")
+            raise
 
         metadata = {
             "page_count": len(pages),
             "chunk_count": len(chunks),
         }
         _update_document_after_processing(conn, document_id, "ready", metadata)
-        
+
         self.update_state(state='SUCCESS', meta={'progress': 100, 'message': 'Document processing completed'})
         return {"status": "completed", "document_id": document_id, "chunks": len(chunks)}
 
     except Exception as exc:
         if conn:
-            _update_status(conn, document_id, "failed")
+            _update_status(conn, document_id, "failed", error=f"{type(exc).__name__}: {exc}")
         raise self.retry(exc=exc, countdown=10)
     finally:
         if conn:
@@ -127,41 +137,70 @@ def _fetch_document(conn, document_id: str) -> dict | None:
         if row:
             return {"id": str(row[0]), "file_name": row[1], "file_url": row[2], "storage_key": row[3], "user_id": str(row[4])}
         return None
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to fetch document %s: %s", document_id, exc)
         return None
 
 
-def _download_from_minio(document_id: str) -> bytes | None:
-    """Download file bytes from MinIO by document ID."""
+def _download_from_minio(storage_key: str) -> tuple[bytes | None, str | None]:
+    """Download file bytes from MinIO/R2 by storage key.
+
+    Returns (bytes, None) on success or (None, error_message) on failure
+    so the caller can persist the reason instead of failing silently.
+    """
     try:
         from src.utils.minio_client import download_file
 
-        resp = download_file(document_id)
-        return resp.read()
-    except Exception:
-        return None
+        resp = download_file(storage_key)
+        try:
+            return resp.read(), None
+        finally:
+            try:
+                resp.close()
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.warning("Download failed for storage key %s: %s", storage_key, exc)
+        return None, f"{type(exc).__name__}: {exc}"
 
 
-def _update_status(conn, document_id: str, status: str) -> None:
-    """Update document status in the database using active DB connection."""
+def _update_status(conn, document_id: str, status: str, error: str | None = None) -> None:
+    """Update document status, persisting the failure reason into metadata when given."""
     try:
         cur = conn.cursor()
-        cur.execute("UPDATE documents SET status = %s WHERE id = %s", (status, document_id))
+        if error:
+            cur.execute(
+                'UPDATE documents SET status = %s, metadata = %s::jsonb WHERE id = %s',
+                (status, json.dumps({"error": str(error)[:2000]}), document_id),
+            )
+        else:
+            cur.execute("UPDATE documents SET status = %s WHERE id = %s", (status, document_id))
         conn.commit()
         cur.close()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Failed to update status for %s: %s", document_id, exc)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
 
 def _update_document_after_processing(conn, document_id: str, status: str, metadata: dict) -> None:
     """Update document status and metadata after processing using active DB connection."""
     try:
+        from psycopg2.extras import Json
+
         cur = conn.cursor()
         cur.execute(
-            "UPDATE documents SET status = %s, file_metadata = %s WHERE id = %s",
-            (status, json.dumps(metadata), document_id),
+            'UPDATE documents SET status = %s, metadata = %s WHERE id = %s',
+            (status, Json(metadata), document_id),
         )
         conn.commit()
         cur.close()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Failed to finalize document %s: %s", document_id, exc)
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
