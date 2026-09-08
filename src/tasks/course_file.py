@@ -61,10 +61,17 @@ def process_course_file_task(
             pages = extract_text_from_pdf(file_bytes)
             if not pages:
                 return {"status": "error", "message": "No text extracted from PDF"}
-        elif ext in {"mp3", "mp4", "webm"}:
+        elif ext in {"mp3", "mp4", "webm", "wav"}:
             self.update_state(state='PROGRESS', meta={'progress': 20, 'message': 'Transcribing audio/video file'})
             from src.tasks.transcription import transcribe_media
             pages = transcribe_media(file_bytes, ext, file_name=file_name or "")
+        elif ext in {"txt", "doc", "docx"}:
+            self.update_state(state='PROGRESS', meta={'progress': 20, 'message': 'Extracting text from office document'})
+            from src.tasks.office_text import extract_text_from_office_file
+            text = extract_text_from_office_file(file_bytes, ext)
+            if not text:
+                return {"status": "error", "message": f"No text extracted from {ext.upper()} file"}
+            pages = [{"page_number": 1, "text": text}]
         else:
             return {"status": "error", "message": f"Unsupported file type: {ext}"}
 

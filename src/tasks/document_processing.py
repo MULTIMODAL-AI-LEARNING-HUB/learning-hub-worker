@@ -46,10 +46,18 @@ def process_document_task(self, document_id: str) -> dict:
             if not pages:
                 _update_status(conn, document_id, "failed")
                 return {"status": "error", "message": "No text extracted from PDF"}
-        elif ext in {"mp3", "mp4", "webm"}:
+        elif ext in {"mp3", "mp4", "webm", "wav"}:
             self.update_state(state='PROGRESS', meta={'progress': 20, 'message': 'Transcribing audio/video file'})
             from src.tasks.transcription import transcribe_media
             pages = transcribe_media(file_bytes, ext, file_name=doc.get("file_name", ""))
+        elif ext in {"txt", "doc", "docx"}:
+            self.update_state(state='PROGRESS', meta={'progress': 20, 'message': 'Extracting text from office document'})
+            from src.tasks.office_text import extract_text_from_office_file
+            text = extract_text_from_office_file(file_bytes, ext)
+            if not text:
+                _update_status(conn, document_id, "failed")
+                return {"status": "error", "message": f"No text extracted from {ext.upper()} file"}
+            pages = [{"page_number": 1, "text": text}]
         else:
             _update_status(conn, document_id, "failed")
             return {"status": "error", "message": f"Unsupported file type: {ext}"}
