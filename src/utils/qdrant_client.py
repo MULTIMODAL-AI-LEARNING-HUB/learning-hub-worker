@@ -97,20 +97,38 @@ def search_similar(
 
     query_filter = Filter(must=conditions) if conditions else None
 
-    results = client.query_points(
-        collection_name=COLLECTION_NAME,
-        query=query_vector,
-        query_filter=query_filter,
-        limit=limit,
-    )
-    return [
-        {
-            "id": r.id,
-            "score": r.score,
-            "payload": r.payload,
-        }
-        for r in results.points
-    ]
+    if hasattr(client, "search"):
+        hits = client.search(
+            collection_name=COLLECTION_NAME,
+            query_vector=query_vector,
+            query_filter=query_filter,
+            limit=limit,
+        )
+        return [
+            {
+                "id": str(r.id),
+                "score": r.score,
+                "payload": r.payload,
+            }
+            for r in hits
+        ]
+    elif hasattr(client, "query_points"):
+        results = client.query_points(
+            collection_name=COLLECTION_NAME,
+            query=query_vector,
+            query_filter=query_filter,
+            limit=limit,
+        )
+        points = results.points if hasattr(results, "points") else results
+        return [
+            {
+                "id": str(r.id),
+                "score": r.score,
+                "payload": r.payload,
+            }
+            for r in points
+        ]
+    return []
 
 
 def delete_by_document_id(document_id: str) -> None:
