@@ -49,8 +49,13 @@ def process_document_task(self, document_id: str) -> dict:
             self.update_state(state='PROGRESS', meta={'progress': 20, 'message': 'Extracting text content from PDF'})
             pages = extract_text_from_pdf(file_bytes)
             if not pages:
-                _update_status(conn, document_id, "failed", error="No text extracted from PDF")
-                return {"status": "error", "message": "No text extracted from PDF"}
+                msg = (
+                    "No readable text found in this PDF. "
+                    "It may be a scanned/image-only file with no text layer — "
+                    "please upload a text-based PDF, or a TXT/DOCX version instead."
+                )
+                _update_status(conn, document_id, "failed", error=msg)
+                return {"status": "error", "message": msg}
         elif ext in {"mp3", "mp4", "webm", "wav"}:
             self.update_state(state='PROGRESS', meta={'progress': 20, 'message': 'Transcribing audio/video file'})
             from src.tasks.transcription import transcribe_media
