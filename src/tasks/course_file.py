@@ -68,10 +68,13 @@ def process_course_file_task(
         elif ext in {"txt", "doc", "docx"}:
             self.update_state(state='PROGRESS', meta={'progress': 20, 'message': 'Extracting text from office document'})
             from src.tasks.office_text import extract_text_from_office_file
+            from src.tasks.pdf_processing import paginate_long_text
             text = extract_text_from_office_file(file_bytes, ext)
             if not text:
                 return {"status": "error", "message": f"No text extracted from {ext.upper()} file"}
-            pages = [{"page_number": 1, "text": text}]
+            pages = paginate_long_text(text)
+            if not pages:
+                return {"status": "error", "message": f"No text extracted from {ext.upper()} file"}
         else:
             return {"status": "error", "message": f"Unsupported file type: {ext}"}
 

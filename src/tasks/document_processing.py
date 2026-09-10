@@ -63,11 +63,17 @@ def process_document_task(self, document_id: str) -> dict:
         elif ext in {"txt", "doc", "docx"}:
             self.update_state(state='PROGRESS', meta={'progress': 20, 'message': 'Extracting text from office document'})
             from src.tasks.office_text import extract_text_from_office_file
+            from src.tasks.pdf_processing import paginate_long_text
             text = extract_text_from_office_file(file_bytes, ext)
             if not text:
                 _update_status(conn, document_id, "failed", error=f"No text extracted from {ext.upper()} file")
                 return {"status": "error", "message": f"No text extracted from {ext.upper()} file"}
-            pages = [{"page_number": 1, "text": text}]
+            # Paginate long office docs into logical academic pages so
+            # citations reference real page numbers instead of "page 1".
+            pages = paginate_long_text(text)
+            if not pages:
+                _update_status(conn, document_id, "failed", error=f"No text extracted from {ext.upper()} file")
+                return {"status": "error", "message": f"No text extracted from {ext.upper()} file"}
         else:
             _update_status(conn, document_id, "failed", error=f"Unsupported file type: {ext}")
             return {"status": "error", "message": f"Unsupported file type: {ext}"}
@@ -114,9 +120,12 @@ def process_document_task(self, document_id: str) -> dict:
             _update_status(conn, document_id, "failed", error=f"Vector index upsert failed: {exc}")
             raise
 
+        avg_chars = round(sum(len(c.get("text", "")) for c in chunks) / len(chunks)) if chunks else 0
         metadata = {
             "page_count": len(pages),
             "chunk_count": len(chunks),
+            "chunking": "recursive_semantic_v2",
+            "avg_chunk_chars": avg_chars,
         }
         _update_document_after_processing(conn, document_id, "ready", metadata)
 

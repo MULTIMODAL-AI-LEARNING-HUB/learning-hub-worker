@@ -1,21 +1,24 @@
 """Flashcard generation task."""
 
+import logging
+
 from celery_app import celery_app
+
+logger = logging.getLogger("worker.flashcards")
 
 
 @celery_app.task(name="generate_flashcards_task", bind=True, max_retries=3, default_retry_delay=10)
 def generate_flashcards_task(self, flashcard_id: str, document_id: str, set_name: str, count: int = 20) -> dict:
-    """Generate flashcards from document context and insert into flashcard_items database table."""
+    """Generate flashcards from stratified full-document context."""
     try:
-        from src.utils.qdrant_client import search_similar
-        from src.utils.embeddings import generate_embedding
+        from src.utils.study_context import build_document_context
 
-        # 1. Retrieve document semantic chunks
-        query_vector = generate_embedding(f"flashcards about document {document_id}")
-        results = search_similar(query_vector, document_id=document_id, limit=5)
-        context = "\n".join([r["payload"]["text"] for r in results]) if results else ""
+        # Stratified sampling so cards test concepts from all chapters,
+        # not just the first few paragraphs.
+        context, total_chunks = build_document_context(document_id)
+        if not context:
+            return {"status": "error", "message": "Document has no indexed content yet"}
 
-        # 2. Query AI service for generation
         import httpx
         from src.core.config import settings
 
@@ -26,23 +29,26 @@ def generate_flashcards_task(self, flashcard_id: str, document_id: str, set_name
                 "context": context,
                 "set_name": set_name,
                 "count": count,
+                "coverage_chunks": total_chunks,
             },
-            timeout=60,
+            timeout=120,
         )
         response.raise_for_status()
         data = response.json()
         items = data.get("items", [])
 
-        # 3. Store in Database
+        # Store in Database
         if items:
             import psycopg2
             import uuid
 
             conn = psycopg2.connect(settings.DATABASE_URL.replace("+asyncpg", ""))
             cur = conn.cursor()
-            
-            # Batch SQL insertion for optimal performance under load
-            insert_query = "INSERT INTO flashcard_items (id, flashcard_id, front_text, back_text) VALUES (%s, %s, %s, %s)"
+
+            insert_query = (
+                "INSERT INTO flashcard_items (id, flashcard_id, front_text, back_text) "
+                "VALUES (%s, %s, %s, %s)"
+            )
             insert_data = [
                 (str(uuid.uuid4()), flashcard_id, item.get("front", ""), item.get("back", ""))
                 for item in items
@@ -54,4 +60,5 @@ def generate_flashcards_task(self, flashcard_id: str, document_id: str, set_name
         return {"status": "completed", "flashcards": items}
 
     except Exception as exc:
+        logger.warning("generate_flashcards_task failed for %s: %s", document_id, exc)
         raise self.retry(exc=exc, countdown=15)

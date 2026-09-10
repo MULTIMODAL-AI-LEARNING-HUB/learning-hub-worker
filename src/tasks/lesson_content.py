@@ -31,7 +31,7 @@ def process_lesson_content_task(self, lesson_id: str, course_id: str | None = No
             return {"status": "skipped", "message": "Lesson content too short after cleaning"}
 
         self.update_state(state='PROGRESS', meta={'progress': 30, 'message': 'Chunking text content'})
-        chunks = chunk_text(clean_text, chunk_size=512, overlap=100)
+        chunks = chunk_text(clean_text)
         if not chunks:
             return {"status": "error", "message": "No semantic chunks could be created"}
 
