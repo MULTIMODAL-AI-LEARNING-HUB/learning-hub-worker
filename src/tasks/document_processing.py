@@ -121,11 +121,24 @@ def process_document_task(self, document_id: str) -> dict:
             raise
 
         avg_chars = round(sum(len(c.get("text", "")) for c in chunks) / len(chunks)) if chunks else 0
+        try:
+            from src.tasks.pdf_processing import extraction_metrics
+            total_pg = len(pages)
+            try:
+                from pypdf import PdfReader as _PR
+                import io as _io
+                total_pg = len(_PR(_io.BytesIO(file_bytes)).pages) or len(pages)
+            except Exception:
+                pass
+            ext_metrics = extraction_metrics(pages, total_pg) if ext == "pdf" else {}
+        except Exception:
+            ext_metrics = {}
         metadata = {
             "page_count": len(pages),
             "chunk_count": len(chunks),
             "chunking": "recursive_semantic_v2",
             "avg_chunk_chars": avg_chars,
+            "extraction": ext_metrics,
         }
         _update_document_after_processing(conn, document_id, "ready", metadata)
 

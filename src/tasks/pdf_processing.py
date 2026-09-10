@@ -1,9 +1,17 @@
-"""PDF text extraction and enterprise-grade recursive semantic chunking."""
+"""PDF text extraction and enterprise-grade recursive semantic chunking.
+
+Extraction chain (2026-09 upgrade):
+  1. PyMuPDF (fitz) primary — best text-layer fidelity for complex layouts,
+     tables, and odd encodings; also renders page images for OCR fallback.
+  2. pypdf fills pages PyMuPDF missed.
+  3. pdfplumber fills any still-empty pages (tables/odd encodings).
+  4. OCR fallback (PyMuPDF pixmap + Tesseract, vie+eng) for scanned /
+     image-only pages — gracefully skipped when deps are absent.
+"""
 
 import io
 import logging
 import re
-from pypdf import PdfReader
 
 logger = logging.getLogger("worker.pdf_processing")
 
@@ -60,8 +68,85 @@ def _clean_page_text(text: str | None) -> str:
     return clean_text(text)
 
 
+def _extract_with_pymupdf(pdf_bytes: bytes) -> list[str]:
+    """Per-page text via PyMuPDF (fitz) — primary engine.
+
+    Best fidelity for complex layouts, embedded fonts and tables.
+    Returns [] when PyMuPDF is not installed so callers fall through.
+    """
+    try:
+        import fitz
+    except ImportError:
+        return []
+    texts: list[str] = []
+    try:
+        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+            if getattr(doc, "needs_pass", False):
+                try:
+                    doc.authenticate("")
+                except Exception:
+                    pass
+            for page in doc:
+                try:
+                    raw = page.get_text("text") or ""
+                    texts.append(_clean_page_text(raw))
+                except Exception:
+                    texts.append("")
+    except Exception as exc:
+        logger.warning("pymupdf extraction failed: %s", exc)
+        return []
+    return texts
+
+
+def _extract_with_ocr(pdf_bytes: bytes, page_numbers: list[int]) -> dict[int, str]:
+    """OCR fallback for scanned/image-only pages via PyMuPDF + Tesseract.
+
+    Returns {page_number (1-based): text}. Empty dict when deps are absent
+    or OCR yields nothing — callers must handle gracefully.
+    """
+    if not page_numbers:
+        return {}
+    try:
+        import fitz
+    except ImportError:
+        return {}
+    try:
+        from PIL import Image
+    except ImportError:
+        return {}
+    try:
+        import pytesseract
+    except ImportError:
+        logger.info("pytesseract not installed — skipping OCR fallback")
+        return {}
+    results: dict[int, str] = {}
+    try:
+        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+            for pn in page_numbers:
+                idx = pn - 1
+                if idx < 0 or idx >= len(doc):
+                    continue
+                try:
+                    page = doc[idx]
+                    pix = page.get_pixmap(dpi=200)
+                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    raw = pytesseract.image_to_string(img, lang="vie+eng")
+                    cleaned = _clean_page_text(raw)
+                    if cleaned:
+                        results[pn] = cleaned
+                except Exception as exc:
+                    logger.warning("OCR failed on page %s: %s", pn, exc)
+    except Exception as exc:
+        logger.warning("OCR fallback failed: %s", exc)
+    return results
+
+
 def _extract_with_pypdf(pdf_bytes: bytes) -> list[str]:
     """Per-page text via pypdf. Returns list indexed by page ('' when empty)."""
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        return []
     reader = PdfReader(io.BytesIO(pdf_bytes))
     try:
         if getattr(reader, "is_encrypted", False):
@@ -104,30 +189,74 @@ def _extract_with_pdfplumber(pdf_bytes: bytes) -> list[str]:
 
 
 def extract_text_from_pdf(pdf_bytes: bytes) -> list[dict]:
-    """Extract text from PDF, returning list of {page_number, text}.
+    """Extract text from PDF, returning list of {page_number, text, engine}.
 
-    Strategy: pypdf first, then pdfplumber fills in pages pypdf missed.
-    Returns [] only when no page yields usable text (e.g. scanned/image-only
-    PDF with no text layer) — the caller turns that into an actionable error.
+    Chain: PyMuPDF primary -> pypdf fills gaps -> pdfplumber fills the rest
+    -> OCR fallback (vie+eng) for still-empty pages. engine records which
+    layer produced each page so document metadata can report extraction
+    quality (text_native vs ocr vs empty counts).
     """
     if not pdf_bytes:
         return []
+    primary: list[str] = []
     try:
-        primary = _extract_with_pypdf(pdf_bytes)
+        primary = _extract_with_pymupdf(pdf_bytes)
     except Exception as exc:
-        logger.warning("pypdf extraction failed: %s", exc)
-        return []
+        logger.warning("pymupdf extraction failed: %s", exc)
+        primary = []
+    if not primary:
+        try:
+            primary = _extract_with_pypdf(pdf_bytes)
+        except Exception as exc:
+            logger.warning("pypdf extraction failed: %s", exc)
+            return []
     if not primary:
         return []
+    engines = ["pymupdf" if t else "" for t in primary]
+    if any(not t for t in primary):
+        try:
+            second = _extract_with_pypdf(pdf_bytes)
+        except Exception:
+            second = []
+        if second and len(second) == len(primary):
+            for i, (p, s) in enumerate(zip(primary, second)):
+                if not p and s:
+                    primary[i] = s
+                    engines[i] = "pypdf"
     if any(not t for t in primary):
         fallback = _extract_with_pdfplumber(pdf_bytes)
         if fallback and len(fallback) == len(primary):
-            primary = [p or f for p, f in zip(primary, fallback)]
+            for i, (p, f) in enumerate(zip(primary, fallback)):
+                if not p and f:
+                    primary[i] = f
+                    engines[i] = "pdfplumber"
+    if any(not t for t in primary):
+        missing = [i + 1 for i, t in enumerate(primary) if not t]
+        ocr = _extract_with_ocr(pdf_bytes, missing)
+        for pn, text in ocr.items():
+            primary[pn - 1] = text
+            engines[pn - 1] = "ocr"
     pages = []
     for i, text in enumerate(primary):
         if text:
-            pages.append({"page_number": i + 1, "text": text})
+            pages.append({"page_number": i + 1, "text": text, "engine": engines[i] or "unknown"})
     return pages
+
+
+def extraction_metrics(pages: list[dict], total_pages: int) -> dict:
+    """Summarize extraction quality for document metadata."""
+    by_engine: dict[str, int] = {}
+    for p in pages:
+        eng = p.get("engine", "unknown")
+        by_engine[eng] = by_engine.get(eng, 0) + 1
+    covered = len(pages)
+    return {
+        "total_pages": total_pages or covered,
+        "pages_with_text": covered,
+        "empty_pages": max(0, (total_pages or covered) - covered),
+        "engines": by_engine,
+        "ocr_pages": by_engine.get("ocr", 0),
+    }
 
 
 def paginate_long_text(text: str, chars_per_page: int = CHARS_PER_LOGICAL_PAGE) -> list[dict]:
