@@ -36,8 +36,51 @@ def build_document_context(
         "questions and answers explained"
     )
     query_vector = generate_embedding(probe)
-    # Pull a wide pool, then stratify by chunk_index for full-doc coverage.
-    pool = search_similar(query_vector, document_id=document_id, limit=60)
+    # Pull a wide pool covering the WHOLE document:
+    # 1) scroll the full ordered chunk list (exact head/middle/tail coverage),
+    # 2) union with semantic probe hits (relevance).
+    # Scroll avoids dense-search bias on 300+ page docs where top-60
+    # semantic hits cluster inside a few chapters.
+    pool: list[dict] = []
+    try:
+        scroll_client = get_qdrant_client()
+        from qdrant_client.models import FieldCondition as _FC
+        from qdrant_client.models import Filter as _F
+        from qdrant_client.models import MatchValue as _MV
+
+        doc_filter = _F(must=[_FC(key="document_id", match=_MV(value=document_id))])
+        offset = None
+        # Cap scroll at ~400 points — enough to stratify even 300+ page
+        # books without OOM on the worker.
+        while len(pool) < 400:
+            batch, offset = scroll_client.scroll(
+                collection_name="document_chunks",
+                scroll_filter=doc_filter,
+                limit=100,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            if not batch:
+                break
+            for p in batch:
+                pool.append({"id": str(p.id), "score": 1.0, "payload": p.payload or {}})
+            if offset is None:
+                break
+    except Exception as exc:
+        logger.warning("study_context scroll failed for %s: %s", document_id, exc)
+        pool = []
+    # Union with semantic probe hits so highly relevant chunks are included
+    # even if the scroll cap truncated part of the document.
+    try:
+        probe_hits = search_similar(query_vector, document_id=document_id, limit=60)
+    except Exception:
+        probe_hits = []
+    seen_ids = {r.get("id") for r in pool}
+    for h in probe_hits:
+        if h.get("id") not in seen_ids:
+            pool.append(h)
+            seen_ids.add(h.get("id"))
     if not pool:
         return "", 0
 
@@ -64,6 +107,10 @@ def build_document_context(
 
     ordered = sorted(pool, key=_idx)
     n = len(ordered)
+    # Evenly-spaced sampling inside each stratum (step = len/quota) so
+    # picked chunks span the FULL segment — with 300+ chunks, taking the
+    # first 12 per segment only covered the segment head (the screenshot bug:
+    # generic/intro-only questions).
     picked: list[dict] = []
     if n <= per_stratum_limit * strata:
         picked = ordered
@@ -72,8 +119,14 @@ def build_document_context(
         for s in range(strata):
             start = s * size
             end = n if s == strata - 1 else (s + 1) * size
-            segment = ordered[start:end][:per_stratum_limit]
-            picked.extend(segment)
+            segment = ordered[start:end]
+            quota = min(per_stratum_limit, len(segment))
+            if quota >= len(segment):
+                picked.extend(segment)
+            else:
+                step = len(segment) / quota
+                idxs = {int(i * step) for i in range(quota)}
+                picked.extend([c for i, c in enumerate(segment) if i in idxs])
         picked = sorted(picked, key=_idx)
 
     parts: list[str] = []
